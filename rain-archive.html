@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R.A.I.N. // BUILDER</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<style>
+  :root{ --void:#040810; --glow:#3ecfff; --glow-dim:#1c6f8c; --glow-hot:#9beeff; --warn:#ffb020; --text:#cdeaf5; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100vh; height:100dvh; background:var(--void); color:var(--text); font-family:'Share Tech Mono', monospace; overflow:hidden;}
+  body{background-image:
+      radial-gradient(ellipse at 50% 0%, rgba(62,207,255,0.08), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(62,207,255,0.025) 0px, rgba(62,207,255,0.025) 1px, transparent 1px, transparent 3px);}
+
+  #boot{position:fixed; inset:0; z-index:50; background:var(--void); display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:14px; letter-spacing:2px; color:var(--glow); animation: bootfade 0.6s ease-in 1.6s forwards;}
+  #boot .line{opacity:0; animation: bootline 0.4s ease-out forwards;}
+  #boot .line:nth-child(1){animation-delay:0.1s;}
+  #boot .line:nth-child(2){animation-delay:0.4s;}
+  #boot .bar{width:280px; height:3px; background:rgba(62,207,255,0.15); margin-top:18px; overflow:hidden;}
+  #boot .bar > div{width:0%; height:100%; background:var(--glow); box-shadow:0 0 10px var(--glow); animation: fill 1.2s ease-in-out 0.2s forwards;}
+  @keyframes bootline{ to{opacity:1;} }
+  @keyframes fill{ to{width:100%;} }
+  @keyframes bootfade{ to{opacity:0; visibility:hidden; pointer-events:none;} }
+
+  #shell{height:100%; width:100%; display:flex; flex-direction:column; opacity:0; animation: shellin 0.8s ease-out 1.4s forwards;}
+  @keyframes shellin{ to{opacity:1;} }
+
+  header{display:flex; align-items:center; justify-content:space-between; padding:12px 22px; border-bottom:1px solid rgba(62,207,255,0.3); position:relative;}
+  header::after{content:''; position:absolute; bottom:-1px; left:0; height:1px; width:100%; background:linear-gradient(90deg, transparent, var(--glow), transparent); animation: sweep 4s linear infinite;}
+  @keyframes sweep{ 0%{transform:translateX(-100%);} 100%{transform:translateX(100%);} }
+  h1{font-family:'Orbitron', sans-serif; font-weight:900; font-size:18px; letter-spacing:5px; color:var(--glow-hot); text-shadow:0 0 12px var(--glow);}
+  h1 span{color:var(--glow-dim); font-size:10px; letter-spacing:2px; display:block; font-family:'Share Tech Mono',monospace; font-weight:400; margin-top:2px;}
+  .status{font-size:10px; letter-spacing:2px; color:var(--glow-dim); text-align:right; white-space:nowrap;}
+  .status .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--glow); box-shadow:0 0 8px var(--glow); margin-right:6px; animation:pulse 1.6s ease-in-out infinite;}
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  main{position:relative; flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; min-height:0;}
+
+  .rig{flex:1; min-height:280px; position:relative; border:1px solid rgba(62,207,255,0.25); background:radial-gradient(ellipse at center, rgba(62,207,255,0.06), transparent 70%); touch-action:none; cursor:grab;}
+  .rig:active{cursor:grabbing;}
+  #rig-canvas{width:100%; height:100%;}
+  .rig-hint{position:absolute; bottom:8px; left:12px; font-size:9px; letter-spacing:1px; color:var(--glow-dim); pointer-events:none;}
+  .frame-corner{position:absolute; width:18px; height:18px; border:2px solid var(--glow); opacity:0.6; pointer-events:none;}
+  .fc-tl{top:-1px; left:-1px; border-right:none; border-bottom:none;}
+  .fc-tr{top:-1px; right:-1px; border-left:none; border-bottom:none;}
+  .fc-bl{bottom:-1px; left:-1px; border-right:none; border-top:none;}
+  .fc-br{bottom:-1px; right:-1px; border-left:none; border-top:none;}
+
+  .float-btn{position:absolute; z-index:5; border:1px solid rgba(62,207,255,0.5); color:var(--glow); background:rgba(4,8,16,0.85); padding:8px 14px; font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:1px; cursor:pointer;}
+  #ed-add-float{top:10px; right:10px;}
+  #ed-dup-float{display:none; top:94px; right:10px;}
+  #ed-del-float{display:none; top:136px; right:10px; border-color:rgba(255,176,32,0.5); color:var(--warn);}
+
+  .zoom-controls{display:flex; align-items:center; gap:10px; margin:10px 0; font-size:10px; letter-spacing:1px; color:var(--glow-dim);}
+  .zoom-controls button{border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 14px; font-family:'Share Tech Mono',monospace; font-size:14px; cursor:pointer;}
+  #reset-view{font-size:10px !important;}
+  #obj-count{margin-left:auto; font-size:10px; letter-spacing:1px; color:var(--glow-dim);}
+
+  #editor-panel{display:none; position:absolute; top:10px; left:10px; z-index:5; width:150px; border:1px solid rgba(62,207,255,0.4); background:rgba(4,8,16,0.9); padding:8px; border-radius:2px;}
+  .ed-row{display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:10px; letter-spacing:1px; color:var(--glow-dim); flex-wrap:wrap;}
+  .ed-row .nudge{border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; width:32px; height:32px; font-family:'Share Tech Mono',monospace; font-size:13px; cursor:pointer;}
+  .ed-btn{border:1px solid rgba(62,207,255,0.5); color:var(--glow-dim); background:rgba(62,207,255,0.08); font-family:'Share Tech Mono',monospace; letter-spacing:1px; cursor:pointer;}
+  .ed-btn.on{color:#001018; border-color:var(--glow); background:var(--glow); font-weight:bold; box-shadow:0 0 10px rgba(62,207,255,0.8);}
+  .swatch{width:24px; height:24px; border:2px solid transparent; cursor:pointer;}
+  .swatch.selected{border-color:var(--glow-hot);}
+
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--glow-dim);}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  header{flex-wrap:wrap; row-gap:8px;}
+
+  @media (max-width:700px){
+    header{padding:10px 14px;}
+    h1{font-size:15px; letter-spacing:3px;}
+    h1 span{display:none;}
+    .status{display:none;}
+    header button{padding:5px 9px !important; font-size:9px !important;}
+  }
+  @media (max-width:640px){
+    main{padding:12px;}
+    .rig{min-height:240px;}
+    #editor-panel{width:120px; padding:6px; font-size:9px;}
+    #editor-panel .ed-btn{font-size:9px !important; padding:8px 0 !important;}
+    #editor-panel .nudge{width:22px !important; height:22px !important;}
+    .float-btn{padding:6px 9px; font-size:9px;}
+    #ed-add-float{top:6px; right:6px;}
+    #ed-add-cyl-float{top:40px; right:6px;}
+    #ed-dup-float{top:74px; right:6px;}
+    #ed-del-float{top:108px; right:6px;}
+    .zoom-controls{flex-wrap:wrap; row-gap:6px; font-size:9px;}
+    #outliner{max-height:80px;}
+  }
+  @media (max-width:400px){
+    #editor-panel{width:100px;}
+    .swatch{width:16px !important; height:16px !important;}
+  }
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.01ms !important; animation-iteration-count:1 !important;} }
+
+  #shell.maximized header{display:none;}
+  #exit-max{display:none; position:fixed; top:10px; right:10px; z-index:20; border:1px solid rgba(62,207,255,0.5); color:var(--glow); background:var(--void); padding:8px 14px; font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:1px; cursor:pointer;}
+  #exit-max.show{display:block;}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="line">R.A.I.N. SYSTEMS // BOOT SEQUENCE</div>
+  <div class="line">LOADING BUILDER...</div>
+  <div class="bar"><div></div></div>
+</div>
+
+<button id="exit-max">✕ EXIT MAXIMIZED VIEW</button>
+
+<div id="shell">
+  <header>
+    <h1>R.A.I.N. <span>Records &amp; Archive of Innovation Network</span></h1>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="status"><span class="dot"></span>BUILDER ONLINE</div>
+      <button id="solid-mode-btn" style="border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">◻ SOLID</button>
+      <button id="snap-mode-btn" style="border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">▦ SNAP</button>
+      <button id="select-all-btn" style="border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">▣ SELECT ALL</button>
+      <button id="delete-all-btn" style="display:none; border:1px solid rgba(255,176,32,0.5); color:var(--warn); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">✕ DELETE ALL</button>
+      <button id="mode-toggle" style="border:1px solid rgba(62,207,255,0.5); color:var(--glow); background:rgba(62,207,255,0.08); padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">✎ EDIT MODE</button>
+      <button id="fullscreen-btn" style="border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">⛶ FULL SCREEN</button>
+      <button id="hand-control-btn" style="border:1px solid rgba(62,207,255,0.35); color:var(--glow-dim); background:transparent; padding:6px 12px; font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:1px; cursor:pointer;">✋ HAND CONTROL</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="rig" id="rig">
+      <div class="frame-corner fc-tl"></div>
+      <div class="frame-corner fc-tr"></div>
+      <div class="frame-corner fc-bl"></div>
+      <div class="frame-corner fc-br"></div>
+      <div id="rig-canvas"></div>
+      <div class="rig-hint">DRAG TO ROTATE • TAP TO SELECT • SCROLL / PINCH TO ZOOM</div>
+      <video id="hand-video" playsinline style="display:none;"></video>
+      <div id="hand-status" style="display:none; position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-size:9px; letter-spacing:1px; color:var(--glow-hot); background:rgba(4,8,16,0.85); padding:4px 10px; border:1px solid rgba(62,207,255,0.4); z-index:6;">STARTING CAMERA…</div>
+      <div id="hand-trash" style="display:none; position:absolute; bottom:16px; left:16px; width:56px; height:56px; border:2px solid rgba(255,176,32,0.6); border-radius:6px; align-items:center; justify-content:center; font-size:22px; color:var(--warn); background:rgba(4,8,16,0.8); z-index:6;">🗑</div>
+      <div id="trash-target" style="position:absolute; bottom:10px; left:10px; z-index:5; width:38px; height:38px; border:1px solid rgba(255,176,32,0.5); background:rgba(4,8,16,0.85); display:none; align-items:center; justify-content:center; font-size:18px;">🗑</div>
+      <button class="float-btn" id="ed-add-float">+ ADD BOX</button>
+      <button class="float-btn" id="ed-add-cyl-float" style="top:52px; right:10px;">+ ADD CYL</button>
+      <button class="float-btn" id="ed-dup-float">⧉ DUPLICATE</button>
+      <button class="float-btn" id="ed-del-float">✕ DELETE</button>
+
+      <div id="editor-panel">
+        <div class="ed-row" style="gap:6px;">
+          <button class="ed-btn" id="gizmo-move-btn" style="flex:1; padding:10px 0; font-size:10px; font-weight:bold;">MOVE</button>
+          <button class="ed-btn" id="gizmo-scale-btn" style="flex:1; padding:10px 0; font-size:10px; font-weight:bold;">SCALE</button>
+          <button class="ed-btn" id="gizmo-rotate-btn" style="flex:1; padding:10px 0; font-size:10px; font-weight:bold;">ROTATE</button>
+        </div>
+        <div class="ed-row" style="color:var(--glow-hot); font-size:9px;">
+          🔴X 🟢Y 🔵Z — drag a handle
+        </div>
+        <div class="ed-row">
+          <span style="font-size:9px;">SCALE</span>
+          <button class="nudge" id="ed-scale-down" style="width:24px;height:24px;">−</button>
+          <button class="nudge" id="ed-scale-up" style="width:24px;height:24px;">+</button>
+        </div>
+        <div class="ed-row" style="flex-direction:column; align-items:stretch; gap:4px;">
+          <span style="font-size:9px;">DIMENSIONS (mm)</span>
+          <div style="display:flex; gap:4px;">
+            <input type="number" id="dim-x" placeholder="X" style="width:0; flex:1; background:rgba(4,8,16,0.8); border:1px solid rgba(62,207,255,0.35); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:10px; padding:5px 3px; text-align:center;">
+            <input type="number" id="dim-y" placeholder="Y" style="width:0; flex:1; background:rgba(4,8,16,0.8); border:1px solid rgba(62,207,255,0.35); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:10px; padding:5px 3px; text-align:center;">
+            <input type="number" id="dim-z" placeholder="Z" style="width:0; flex:1; background:rgba(4,8,16,0.8); border:1px solid rgba(62,207,255,0.35); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:10px; padding:5px 3px; text-align:center;">
+          </div>
+        </div>
+        <div class="ed-row" id="ed-colors" style="flex-wrap:wrap;">
+        </div>
+        <div class="ed-row" style="gap:6px;">
+          <button class="ed-btn" id="mirror-x-btn" style="flex:1; padding:6px 0; font-size:9px;">MIRROR X</button>
+          <button class="ed-btn" id="mirror-z-btn" style="flex:1; padding:6px 0; font-size:9px;">MIRROR Z</button>
+          <button class="ed-btn" id="array-btn" style="flex:1; padding:6px 0; font-size:9px;">ARRAY +2</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="zoom-controls">
+      <button id="zoom-out">−</button>
+      <button id="zoom-in">+</button>
+      <button id="reset-view" style="padding:6px 12px; letter-spacing:1px;">RESET VIEW</button>
+      <button id="undo-btn" disabled style="padding:6px 12px; letter-spacing:1px; opacity:0.4;">↺ UNDO</button>
+      <span id="obj-count">0 OBJECTS</span>
+    </div>
+
+    <div id="outliner" style="display:none; border:1px solid rgba(62,207,255,0.25); margin-top:4px; max-height:110px; overflow-y:auto;"></div>
+
+    <div class="zoom-controls" style="margin-top:6px;">
+      <button id="grid-toggle-btn" style="padding:6px 12px; letter-spacing:1px;">▦ GRID</button>
+      <button id="export-stl-btn" style="padding:6px 12px; letter-spacing:1px;">⭳ STL</button>
+      <button id="save-btn" style="padding:6px 12px; letter-spacing:1px;">⭳ SAVE</button>
+      <button id="load-btn" style="padding:6px 12px; letter-spacing:1px;">⭱ LOAD</button>
+      <input type="file" id="load-file-input" accept=".json" style="display:none;">
+    </div>
+  </main>
+</div>
+
+<script>
+const EDITOR_COLORS = [0x3ecfff, 0xffb020, 0xff5c5c, 0x8fff9e, 0xffffff];
+
+let scene, camera, renderer;
+let gridHelper = null;
+function toggleGrid(){
+  if(!gridHelper) return;
+  gridHelper.visible = !gridHelper.visible;
+  const btn = document.getElementById('grid-toggle-btn');
+  btn.style.color = gridHelper.visible ? 'var(--glow)' : 'var(--glow-dim)';
+  btn.style.borderColor = gridHelper.visible ? 'var(--glow)' : 'rgba(62,207,255,0.35)';
+}
+let rotX = 0.15, rotY = 0.4, targetRotX = 0.15, targetRotY = 0.4;
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0;
+let touchDragging = false;
+let gizmoAxis = null, gizmoSign = 1, gizmoStartObjPos = null, gizmoStartObjScale = null, gizmoScreenDir = null, gizmoPixelsPerUnit = 1, gizmoDragStartMouse = null;
+let gizmoStartObjRotY = 0, gizmoRotateStartAngle = 0;
+let spinVelocityY = 0, spinVelocityX = 0;
+let camDist = 8.5, targetDist = 8.5;
+
+/* ---------------- hand tracking (MediaPipe Hands) ---------------- */
+let handControlOn = false;
+let handsModel = null, handCamera = null;
+let handPrevX = null, handPrevY = null;
+let handLostFrames = 0;
+let handIsPinching = false;
+let handSmoothed = null;
+function smoothLandmarks(raw){
+  if(!handSmoothed){
+    handSmoothed = raw.map(p => ({x:p.x, y:p.y}));
+  } else {
+    const k = 0.6; // higher = snappier, lower = smoother but more lag
+    for(let i=0;i<raw.length;i++){
+      handSmoothed[i].x += (raw[i].x - handSmoothed[i].x) * k;
+      handSmoothed[i].y += (raw[i].y - handSmoothed[i].y) * k;
+    }
+  }
+  return handSmoothed;
+}
+let handRaycaster = null;
+let handInteractionAPI = null;
+let handGizmoGrabbed = false;
+let handIsFist = false;
+let handFistTriggered = false;
+
+function setHandStatus(msg){
+  const el = document.getElementById('hand-status');
+  if(msg){ el.style.display = 'block'; el.textContent = msg; }
+  else { el.style.display = 'none'; }
+}
+
+/* ---------------- particle hand (visual proxy of the tracked hand, in-scene) ---------------- */
+let handDotsGroup = null, handDots = [], handLines = null, handPalmGlow = null;
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17]
+];
+const HAND_FINGERTIPS = new Set([4,8,12,16,20]);
+function ensureHandDots(){
+  if(handDotsGroup) return;
+  handDotsGroup = new THREE.Group();
+  handDotsGroup.visible = false;
+  for(let i=0;i<21;i++){
+    const isTip = HAND_FINGERTIPS.has(i);
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(isTip ? 0.065 : 0.04, 10, 8),
+      new THREE.MeshBasicMaterial({color: isTip ? 0xd6faff : 0x9beeff, transparent:true, opacity:0.95, depthTest:false})
+    );
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(isTip ? 0.16 : 0.09, 10, 8),
+      new THREE.MeshBasicMaterial({color:0x3ecfff, transparent:true, opacity:0.22, depthTest:false, blending:THREE.AdditiveBlending})
+    );
+    const g = new THREE.Group();
+    core.renderOrder = 21; glow.renderOrder = 20;
+    g.add(glow, core);
+    handDotsGroup.add(g);
+    handDots.push(g);
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(HAND_CONNECTIONS.length * 2 * 3);
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  handLines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({color:0x6fe0ff, transparent:true, opacity:0.75, depthTest:false, blending:THREE.AdditiveBlending}));
+  handLines.renderOrder = 19;
+  handDotsGroup.add(handLines);
+
+  // a soft palm-glow disc for a more "energy field" feel
+  const palmGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.4, 20),
+    new THREE.MeshBasicMaterial({color:0x3ecfff, transparent:true, opacity:0.08, depthTest:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide})
+  );
+  palmGlow.renderOrder = 18;
+  handDotsGroup.add(palmGlow);
+  handPalmGlow = palmGlow;
+
+  scene.add(handDotsGroup);
+}
+function updateHandDots(landmarks){
+  ensureHandDots();
+  handDotsGroup.visible = true;
+  // project each normalized landmark (x,y in 0..1, mirrored for natural feel) onto a plane in front of the camera
+  const planeZ = camDist * 0.55;
+  const pts = landmarks.map(p => new THREE.Vector3(
+    (0.5 - p.x) * 6,   // mirrored horizontally so it feels like a real reflection
+    (0.5 - p.y) * 4.2,
+    planeZ
+  ));
+  pts.forEach((p, i) => handDots[i].position.copy(p));
+  const posAttr = handLines.geometry.attributes.position;
+  HAND_CONNECTIONS.forEach((pair, i) => {
+    posAttr.setXYZ(i*2, pts[pair[0]].x, pts[pair[0]].y, pts[pair[0]].z);
+    posAttr.setXYZ(i*2+1, pts[pair[1]].x, pts[pair[1]].y, pts[pair[1]].z);
+  });
+  posAttr.needsUpdate = true;
+  if(handPalmGlow){
+    handPalmGlow.position.copy(pts[9]);
+    handPalmGlow.lookAt(camera.position);
+  }
+}
+function hideHandDots(){
+  if(handDotsGroup) handDotsGroup.visible = false;
+}
+
+function handToScreen(normX, normY){
+  const rect = handInteractionAPI.getRect();
+  return {
+    x: rect.left + (1 - normX) * rect.width,  // mirrored so it feels like a reflection
+    y: rect.top + normY * rect.height
+  };
+}
+
+function onHandResults(results){
+  const numHands = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+
+  if(numHands === 0){
+    handLostFrames++;
+    if(handLostFrames > 12){
+      handPrevX = null; handPrevY = null;
+      handSmoothed = null;
+      if(handGizmoGrabbed && handInteractionAPI){ handInteractionAPI.endGizmoDrag(); handGizmoGrabbed = false; }
+      if(handFistDragging) endFistDrag(false);
+      handIsPinching = false; handIsFist = false; handFistTriggered = false;
+      setHandStatus('NO HAND DETECTED'); hideHandDots(); showHandTrash(false);
+    }
+    return;
+  }
+  handLostFrames = 0;
+  setHandStatus(null);
+
+  // ---- two hands visible: spread them apart to zoom in, bring together to zoom out ----
+  if(numHands >= 2){
+    hideHandDots();
+    setHandStatus('TWO-HAND ZOOM');
+    const h1 = results.multiHandLandmarks[0], h2 = results.multiHandLandmarks[1];
+    // use each hand's pinch point (thumb tip + index tip) — matches a real "zoom gesture" claw shape
+    const c1 = {x:(h1[4].x+h1[8].x)/2, y:(h1[4].y+h1[8].y)/2};
+    const c2 = {x:(h2[4].x+h2[8].x)/2, y:(h2[4].y+h2[8].y)/2};
+    const handDist = Math.hypot(c1.x-c2.x, c1.y-c2.y);
+    const zMapped = 14 - Math.min(1, Math.max(0, (handDist - 0.12) / 0.55)) * 11;
+    targetDist += (zMapped - targetDist) * 0.12;
+    targetDist = Math.max(3, Math.min(14, targetDist));
+    handPrevX = null; handPrevY = null; handSmoothed = null; // don't let a stale single-hand delta/smoothing fire once we drop back to 1 hand
+    return;
+  }
+
+  const lm = smoothLandmarks(results.multiHandLandmarks[0]);
+  updateHandDots(lm);
+  const px = (lm[0].x + lm[9].x) / 2;
+  const py = (lm[0].y + lm[9].y) / 2;
+
+  const nowPinching = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) < 0.045;
+  const fingertips = [8,12,16,20];
+  const avgSpread = fingertips.reduce((s,i) => s + Math.hypot(lm[i].x-lm[0].x, lm[i].y-lm[0].y), 0) / fingertips.length;
+  const nowFist = avgSpread < 0.16;
+
+  // ---- rotate the model by swiping an open hand (only when not pinching/grabbing/fisting) ----
+  if(handPrevX !== null && !nowPinching && !nowFist && (!editMode || !selectedObj) && !dragging && !touchDragging && !gizmoAxis){
+    const dx = (px - handPrevX) * 900;
+    const dy = (py - handPrevY) * 900;
+    spinVelocityY = -dx * 0.01;
+    spinVelocityX = dy * 0.01;
+  }
+  handPrevX = px; handPrevY = py;
+
+  // ---- point (index extended, other fingers curled) → select whatever it's pointing at ----
+  const isPointing = Math.hypot(lm[8].x-lm[0].x, lm[8].y-lm[0].y) > 0.2
+    && Math.hypot(lm[12].x-lm[0].x, lm[12].y-lm[0].y) < 0.16
+    && Math.hypot(lm[16].x-lm[0].x, lm[16].y-lm[0].y) < 0.16
+    && Math.hypot(lm[20].x-lm[0].x, lm[20].y-lm[0].y) < 0.16;
+  if(isPointing && editMode && !nowPinching && !nowFist && handInteractionAPI){
+    const tip = handToScreen(lm[8].x, lm[8].y);
+    handInteractionAPI.tapSelect(tip.x, tip.y);
+  }
+
+  // ---- pinch → grab a gizmo handle (move/scale/rotate) and drag it; release lets go ----
+  if(editMode && handInteractionAPI){
+    if(nowPinching && !handIsPinching){
+      const mid = handToScreen((lm[4].x+lm[8].x)/2, (lm[4].y+lm[8].y)/2);
+      const pick = handInteractionAPI.tryGizmoPick(mid.x, mid.y);
+      if(pick){ handInteractionAPI.beginGizmoDrag(pick, mid.x, mid.y); handGizmoGrabbed = true; }
+    } else if(nowPinching && handGizmoGrabbed){
+      const mid = handToScreen((lm[4].x+lm[8].x)/2, (lm[4].y+lm[8].y)/2);
+      handInteractionAPI.updateGizmoDrag(mid.x, mid.y);
+    } else if(!nowPinching && handGizmoGrabbed){
+      handInteractionAPI.endGizmoDrag();
+      handGizmoGrabbed = false;
+    }
+  }
+  handIsPinching = nowPinching;
+
+  // ---- fist on the selected object → grab it and drag; drop over the trash can to delete ----
+  const handScreen = handToScreen(px, py);
+  if(nowFist && !handIsFist && editMode && selectedObj && !handGizmoGrabbed){
+    beginFistDrag(handScreen.x, handScreen.y);
+  } else if(nowFist && handFistDragging){
+    updateFistDrag(handScreen.x, handScreen.y);
+  } else if(!nowFist && handFistDragging){
+    endFistDrag(isOverTrash(handScreen.x, handScreen.y));
+  }
+  handIsFist = nowFist;
+}
+
+/* ---------------- fist-grab drag-to-trash ---------------- */
+let handFistDragging = false;
+let handFistStartObjPos = null;
+
+function showHandTrash(on){
+  const el = document.getElementById('hand-trash');
+  el.style.display = on ? 'flex' : 'none';
+  el.style.borderColor = 'rgba(255,176,32,0.6)';
+  el.style.background = 'rgba(4,8,16,0.8)';
+}
+function isOverTrash(screenX, screenY){
+  const trash = document.getElementById('hand-trash');
+  const r = trash.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  const proximity = Math.max(r.width, r.height) * 1.6; // generous radius, not just exact bounds
+  return Math.hypot(screenX-cx, screenY-cy) < proximity;
+}
+function beginFistDrag(x, y){
+  handFistDragging = true;
+  handFistStartObjPos = selectedObj.position.clone();
+  handFistDragStartScreen = {x, y};
+  showHandTrash(true);
+}
+function updateFistDrag(x, y){
+  if(!selectedObj) { handFistDragging = false; return; }
+  const rect = handInteractionAPI.getRect();
+  const dx = (x - handFistDragStartScreen.x) / rect.width * 11;
+  const dy = (y - handFistDragStartScreen.y) / rect.height * 11;
+  selectedObj.position.x = handFistStartObjPos.x + dx;
+  selectedObj.position.y = handFistStartObjPos.y - dy;
+  if(typeof syncGizmoPosition === 'function') syncGizmoPosition();
+  if(typeof syncScaleHandles === 'function') syncScaleHandles();
+  const over = isOverTrash(x, y);
+  const trash = document.getElementById('hand-trash');
+  trash.style.borderColor = over ? '#ff5c5c' : 'rgba(255,176,32,0.6)';
+  trash.style.background = over ? 'rgba(255,92,92,0.25)' : 'rgba(4,8,16,0.8)';
+}
+function endFistDrag(droppedOnTrash){
+  handFistDragging = false;
+  showHandTrash(false);
+  if(!selectedObj) return;
+  if(droppedOnTrash){
+    deleteSelected();
+  } else if(typeof recenterPivot === 'function'){
+    recenterPivot();
+  }
+}
+let handFistDragStartScreen = {x:0, y:0};
+
+function startHandControl(){
+  const video = document.getElementById('hand-video');
+  if(typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+    setHandStatus('HAND TRACKING LIBRARY FAILED TO LOAD');
+    return;
+  }
+  handsModel = new Hands({locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  handsModel.setOptions({maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.45, minTrackingConfidence: 0.35});
+  handsModel.onResults(onHandResults);
+
+  setHandStatus('STARTING CAMERA…');
+
+  handCamera = new Camera(video, {
+    onFrame: async () => { await handsModel.send({image: video}); },
+    width: 192, height: 144
+  });
+  handCamera.start().catch(err => {
+    setHandStatus('CAMERA BLOCKED: ' + err.message);
+  });
+}
+
+function stopHandControl(){
+  if(handCamera){ handCamera.stop(); handCamera = null; }
+  setHandStatus(null);
+  handPrevX = null; handPrevY = null;
+  showHandTrash(false);
+  if(handGizmoGrabbed && handInteractionAPI){ handInteractionAPI.endGizmoDrag(); handGizmoGrabbed = false; }
+  hideHandDots();
+}
+
+function toggleHandControl(){
+  handControlOn = !handControlOn;
+  const btn = document.getElementById('hand-control-btn');
+  btn.style.color = handControlOn ? '#001018' : 'var(--glow-dim)';
+  btn.style.background = handControlOn ? 'var(--glow)' : 'transparent';
+  btn.style.borderColor = handControlOn ? 'var(--glow)' : 'rgba(62,207,255,0.35)';
+  if(handControlOn) startHandControl(); else stopHandControl();
+}
+
+let pinchStart = null;
+
+let editorGroup = null;
+let editorObjects = [];
+let selectedObj = null;
+let editMode = true;
+let solidMode = false;
+let snapEnabled = false;
+const SNAP_MM = 5; // snap increment in mm while moving
+function toggleSnapMode(){
+  snapEnabled = !snapEnabled;
+  const btn = document.getElementById('snap-mode-btn');
+  btn.textContent = snapEnabled ? '▦ SNAP (5mm)' : '▦ SNAP';
+  btn.style.color = snapEnabled ? '#001018' : 'var(--glow-dim)';
+  btn.style.background = snapEnabled ? 'var(--glow)' : 'transparent';
+  btn.style.borderColor = snapEnabled ? 'var(--glow)' : 'rgba(62,207,255,0.35)';
+}
+let shapeCounter = 0;
+let groupMoveActive = false;
+let groupMoveStartPositions = null;
+let groupRotateStartCentroid = null, groupRotateStartPositions = null, groupRotateStartRotYs = null;
+function toggleSelectAll(){
+  if(!editMode) return;
+  groupMoveActive = !groupMoveActive;
+  const btn = document.getElementById('select-all-btn');
+  document.getElementById('delete-all-btn').style.display = groupMoveActive ? 'inline-block' : 'none';
+  if(groupMoveActive){
+    selectObject(null);
+    editorObjects.forEach(o => highlightObj(o, true));
+    btn.style.color = '#001018';
+    btn.style.background = 'var(--glow)';
+    btn.style.borderColor = 'var(--glow)';
+  } else {
+    editorObjects.forEach(o => highlightObj(o, false));
+    btn.style.color = 'var(--glow-dim)';
+    btn.style.background = 'transparent';
+    btn.style.borderColor = 'rgba(62,207,255,0.35)';
+  }
+  updateGizmoVisibility();
+  updateOutliner();
+}
+
+function buildMeshMaterial(color){
+  // SOLID mode: pure white, lit/shaded (Phong) — faces read light
+  // differently per orientation so the part is easy to read while editing.
+  if(solidMode){
+    return new THREE.MeshPhongMaterial({
+      color: 0xffffff, shininess: 18, specular: 0x333333,
+      transparent:false, depthWrite:true
+    });
+  }
+  // HOLOGRAM mode: unlit, transparent, glowing — Stark-style projection
+  return new THREE.MeshBasicMaterial({
+    color, transparent:true, opacity:0.18, depthWrite:false
+  });
+}
+function makeShape(geometry, color, opacity){
+  const mat = buildMeshMaterial(color);
+  if(!solidMode && opacity!==undefined) mat.opacity = opacity;
+  const mesh = new THREE.Mesh(geometry, mat);
+  const edgesColor = solidMode ? 0x9beeff : color;
+  const edgesOpacity = solidMode ? 0.55 : 0.9;
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({color: edgesColor, transparent:true, opacity: edgesOpacity}));
+  const g = new THREE.Group();
+  g.add(mesh); g.add(edges);
+  return g;
+}
+function applyBoxStyle(box){
+  const mesh = box.children[0], edges = box.children[1];
+  const newMat = buildMeshMaterial(box.userData.color);
+  mesh.material.dispose();
+  mesh.material = newMat;
+  edges.material.color.set(solidMode ? 0x9beeff : box.userData.color);
+  edges.material.opacity = solidMode ? 0.55 : 0.9;
+}
+function disposeShape(group){
+  // frees GPU memory for both the solid mesh and its edge lines —
+  // without this, deleted boxes stay resident in GPU memory (leak),
+  // which matters more on tablet GPUs than desktop.
+  group.children.forEach(child => {
+    if(child.geometry) child.geometry.dispose();
+    if(child.material) child.material.dispose();
+  });
+}
+function refreshBoxStyles(){
+  editorObjects.forEach(applyBoxStyle);
+  if(selectedObj) highlightObj(selectedObj, true);
+}
+function toggleSolidMode(){
+  solidMode = !solidMode;
+  const btn = document.getElementById('solid-mode-btn');
+  btn.textContent = solidMode ? '◼ SOLID' : '◻ SOLID';
+  btn.style.color = solidMode ? '#001018' : 'var(--glow-dim)';
+  btn.style.background = solidMode ? 'var(--glow)' : 'transparent';
+  btn.style.borderColor = solidMode ? 'var(--glow)' : 'rgba(62,207,255,0.35)';
+  refreshBoxStyles();
+}
+
+function ensureEditorGroup(){
+  if(!editorGroup){
+    editorGroup = new THREE.Group();
+    scene.add(editorGroup);
+  }
+  ensureGizmo();
+}
+function highlightObj(group, on){
+  const edges = group.children[1];
+  if(edges) edges.material.color.set(on ? 0xffb020 : (solidMode ? 0x9beeff : group.userData.color));
+}
+function selectObject(group){
+  if(selectedObj) highlightObj(selectedObj, false);
+  selectedObj = group;
+  if(selectedObj) highlightObj(selectedObj, true);
+  updateGizmoVisibility();
+  updateEditorUI();
+  updateDimensionInputs();
+  updateOutliner();
+}
+function updateDimensionInputs(){
+  const dx = document.getElementById('dim-x'), dy = document.getElementById('dim-y'), dz = document.getElementById('dim-z');
+  if(!dx) return;
+  if(!selectedObj){ dx.value = ''; dy.value = ''; dz.value = ''; return; }
+  if(document.activeElement !== dx) dx.value = sizeToMM(selectedObj.scale.x);
+  if(document.activeElement !== dy) dy.value = sizeToMM(selectedObj.scale.y);
+  if(document.activeElement !== dz) dz.value = sizeToMM(selectedObj.scale.z);
+}
+function applyDimensionInput(axis, val){
+  if(!selectedObj) return;
+  const mm = parseFloat(val);
+  if(isNaN(mm) || mm <= 0) return;
+  selectedObj.scale[axis] = mmToScale(mm);
+  syncScaleHandles();
+  syncMoveHandles();
+  syncGizmoPosition();
+}
+
+/* ---------------- move gizmo (drag arrows) & scale gizmo (drag a face to stretch) ---------------- */
+let moveGizmoGroup = null, scaleGizmoGroup = null, rotateGizmoGroup = null;
+let gizmoMode = 'move'; // 'move' | 'scale'
+const GIZMO_AXES = { x:0xff5c5c, y:0x8fff9e, z:0x4fc3ff };
+const BOX_HALF = 0.35; // half-size of the base BoxGeometry(0.7,...)
+const MM_PER_UNIT = 100; // 1 three.js unit = 100mm
+const BASE_SIZE_UNITS = 0.7; // full extent of the base geometry along any local axis (box or cylinder)
+function sizeToMM(scaleVal){ return Math.round(scaleVal * BASE_SIZE_UNITS * MM_PER_UNIT * 10) / 10; }
+function mmToScale(mm){ return Math.max(0.01, mm) / (BASE_SIZE_UNITS * MM_PER_UNIT); }
+const FACES = [
+  {axis:'x', sign: 1}, {axis:'x', sign:-1},
+  {axis:'y', sign: 1}, {axis:'y', sign:-1},
+  {axis:'z', sign: 1}, {axis:'z', sign:-1}
+];
+function buildArrow(axis, color){
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.85,8), new THREE.MeshBasicMaterial({color, depthTest:false}));
+  shaft.position.y = 0.425;
+  shaft.renderOrder = 10;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.065,0.2,10), new THREE.MeshBasicMaterial({color, depthTest:false}));
+  head.position.y = 0.85 + 0.1;
+  head.renderOrder = 10;
+  const hitZone = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,1.15,8), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0, depthWrite:false, depthTest:false}));
+  hitZone.position.y = 0.5;
+  g.add(shaft, head, hitZone);
+  if(axis === 'x') g.rotation.z = -Math.PI/2;
+  if(axis === 'z') g.rotation.x = Math.PI/2;
+  g.userData.axis = axis;
+  g.userData.hitMeshes = [hitZone];
+  return g;
+}
+function buildFaceHandle(axis, sign, color){
+  const g = new THREE.Group();
+  const stickLen = 0.22;
+  // built along local +Y, then rotated per-axis using the same scheme as
+  // buildArrow (already proven correct) — sign flips it to point at the
+  // negative face instead of the positive one.
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,stickLen,8), new THREE.MeshBasicMaterial({color, depthTest:false}));
+  stick.position.y = sign * stickLen/2;
+  stick.renderOrder = 10;
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.03,0.1), new THREE.MeshBasicMaterial({color, depthTest:false}));
+  plate.position.y = sign * stickLen;
+  plate.renderOrder = 10;
+  const hitZone = new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,stickLen+0.14,8), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0, depthWrite:false, depthTest:false}));
+  hitZone.position.y = sign * stickLen/2;
+  g.add(stick, plate, hitZone);
+  if(axis === 'x') g.rotation.z = -Math.PI/2;
+  if(axis === 'z') g.rotation.x = Math.PI/2;
+  g.userData.axis = axis;
+  g.userData.sign = sign;
+  g.userData.hitMeshes = [hitZone];
+  return g;
+}
+function buildRotateRing(color){
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.015, 8, 48), new THREE.MeshBasicMaterial({color, depthTest:false}));
+  ring.rotation.x = Math.PI/2; // lie flat in the XZ plane — this ring spins the object around Y (yaw)
+  ring.renderOrder = 10;
+  const hitZone = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 8, 48), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0, depthWrite:false, depthTest:false}));
+  hitZone.rotation.x = Math.PI/2;
+  g.add(ring, hitZone);
+  g.userData.axis = 'y';
+  g.userData.hitMeshes = [hitZone];
+  return g;
+}
+function ensureGizmo(){
+  if(!moveGizmoGroup){
+    moveGizmoGroup = new THREE.Group();
+    ['x','y','z'].forEach(axis => moveGizmoGroup.add(buildArrow(axis, GIZMO_AXES[axis])));
+    moveGizmoGroup.visible = false;
+    editorGroup.add(moveGizmoGroup);
+  }
+  if(!scaleGizmoGroup){
+    scaleGizmoGroup = new THREE.Group();
+    FACES.forEach(f => scaleGizmoGroup.add(buildFaceHandle(f.axis, f.sign, GIZMO_AXES[f.axis])));
+    scaleGizmoGroup.visible = false;
+    editorGroup.add(scaleGizmoGroup);
+  }
+  if(!rotateGizmoGroup){
+    rotateGizmoGroup = new THREE.Group();
+    rotateGizmoGroup.add(buildRotateRing(0x8fff9e));
+    rotateGizmoGroup.visible = false;
+    editorGroup.add(rotateGizmoGroup);
+  }
+}
+function activeGizmoGroup(){
+  if(groupMoveActive){
+    if(gizmoMode === 'rotate') return rotateGizmoGroup;
+    return moveGizmoGroup; // group scale isn't supported — falls back to move
+  }
+  if(gizmoMode === 'scale') return scaleGizmoGroup;
+  if(gizmoMode === 'rotate') return rotateGizmoGroup;
+  return moveGizmoGroup;
+}
+function syncScaleHandles(){
+  if(!scaleGizmoGroup || !selectedObj) return;
+  scaleGizmoGroup.children.forEach(h => {
+    const axis = h.userData.axis, sign = h.userData.sign;
+    const halfExtent = BOX_HALF * selectedObj.scale[axis];
+    h.position.set(0,0,0);
+    h.position[axis] = sign * halfExtent;
+  });
+}
+function syncMoveHandles(){
+  if(!moveGizmoGroup || !selectedObj) return;
+  moveGizmoGroup.children.forEach(h => {
+    const axis = h.userData.axis;
+    // start the arrow right at the box surface, not the box center —
+    // both +X/+Y/+Z and -X/-Y/-Z ends get an arrow flipped outward.
+    const halfExtent = BOX_HALF * Math.abs(selectedObj.scale[axis]);
+    h.position.set(0,0,0);
+    h.position[axis] = halfExtent;
+  });
+}
+function groupCentroid(){
+  const centroid = new THREE.Vector3();
+  if(editorObjects.length === 0) return centroid;
+  editorObjects.forEach(o => centroid.add(o.position));
+  centroid.divideScalar(editorObjects.length);
+  return centroid;
+}
+function syncGroupGizmoHandles(){
+  const centroid = groupCentroid();
+  if(moveGizmoGroup){
+    moveGizmoGroup.position.copy(centroid);
+    // no single object's scale to reference in group mode — use a fixed,
+    // comfortably-sized offset so arrows clear a typical part regardless
+    // of how big any individual box is
+    moveGizmoGroup.children.forEach(h => {
+      const axis = h.userData.axis;
+      h.position.set(0,0,0);
+      h.position[axis] = BOX_HALF * 1.3;
+    });
+  }
+  if(rotateGizmoGroup) rotateGizmoGroup.position.copy(centroid);
+}
+function updateGizmoVisibility(){
+  if(!moveGizmoGroup || !scaleGizmoGroup || !rotateGizmoGroup) return;
+  const show = editMode && (!!selectedObj || groupMoveActive);
+  if(groupMoveActive){
+    moveGizmoGroup.visible = show && gizmoMode !== 'rotate';
+    scaleGizmoGroup.visible = false; // group scale isn't supported (no single reference size)
+    rotateGizmoGroup.visible = show && gizmoMode === 'rotate';
+    syncGroupGizmoHandles();
+  } else {
+    moveGizmoGroup.visible = show && gizmoMode === 'move';
+    scaleGizmoGroup.visible = show && gizmoMode === 'scale';
+    rotateGizmoGroup.visible = show && gizmoMode === 'rotate';
+    if(selectedObj){ syncGizmoPosition(); syncScaleHandles(); syncMoveHandles(); }
+  }
+}
+function syncGizmoPosition(){
+  if(!selectedObj) return;
+  if(moveGizmoGroup) moveGizmoGroup.position.copy(selectedObj.position);
+  if(scaleGizmoGroup) scaleGizmoGroup.position.copy(selectedObj.position);
+  if(rotateGizmoGroup) rotateGizmoGroup.position.copy(selectedObj.position);
+}
+function setGizmoMode(mode){
+  gizmoMode = mode;
+  document.getElementById('gizmo-move-btn').classList.toggle('on', mode==='move');
+  document.getElementById('gizmo-scale-btn').classList.toggle('on', mode==='scale');
+  document.getElementById('gizmo-rotate-btn').classList.toggle('on', mode==='rotate');
+  updateGizmoVisibility();
+}
+function recenterPivot(){
+  if(!editorGroup) return;
+  if(editorObjects.length === 0){ syncGizmoPosition(); return; }
+  const centroid = new THREE.Vector3();
+  editorObjects.forEach(o => centroid.add(o.position));
+  centroid.divideScalar(editorObjects.length);
+  if(centroid.lengthSq() < 0.0001){ syncGizmoPosition(); return; }
+  editorObjects.forEach(o => o.position.sub(centroid));
+  // boxes currently flying to the trash aren't in editorObjects anymore,
+  // but they're still children of editorGroup — compensate them too or
+  // their world position jumps the instant editorGroup.position shifts below.
+  deletingObjects.forEach(d => d.group.position.sub(centroid));
+  editorGroup.position.add(centroid.clone().applyQuaternion(editorGroup.quaternion));
+  syncGizmoPosition();
+}
+function geometryForType(type){
+  if(type === 'cylinder') return new THREE.CylinderGeometry(BOX_HALF, BOX_HALF, BASE_SIZE_UNITS, 24);
+  return new THREE.BoxGeometry(BASE_SIZE_UNITS, BASE_SIZE_UNITS, BASE_SIZE_UNITS);
+}
+function addShapeRaw(type, color, pos, scale, rotY, skipSelect){
+  ensureEditorGroup();
+  const geo = geometryForType(type);
+  const group = makeShape(geo, color, 0.2);
+  group.position.copy(pos);
+  if(scale) group.scale.copy(scale);
+  if(rotY) group.rotation.y = rotY;
+  group.userData.color = color;
+  group.userData.shapeType = type;
+  group.userData.name = (type === 'cylinder' ? 'CYL ' : 'BOX ') + (++shapeCounter);
+  editorGroup.add(group);
+  editorObjects.push(group);
+  if(!skipSelect) selectObject(group);
+  return group;
+}
+function addBoxRaw(color, pos, scale, rotY, skipSelect){
+  return addShapeRaw('box', color, pos, scale, rotY, skipSelect);
+}
+function addCylinderRaw(color, pos, scale, rotY, skipSelect){
+  return addShapeRaw('cylinder', color, pos, scale, rotY, skipSelect);
+}
+function addShape(type, color, pos, scale, rotY){
+  pushUndoSnapshot();
+  color = color !== undefined ? color : EDITOR_COLORS[0];
+  ensureEditorGroup();
+  let localPos = pos;
+  if(!localPos){
+    // editorGroup's own position/rotation drifts as recenterPivot keeps
+    // the rotation pivot centered on the assembly — so local (0,0,0) is
+    // NOT necessarily the true visual center anymore. Convert true world
+    // origin into editorGroup's current local space instead.
+    editorGroup.updateMatrixWorld();
+    localPos = editorGroup.worldToLocal(new THREE.Vector3(0,0,0));
+  }
+  addShapeRaw(type, color, localPos, scale, rotY || 0, false);
+  updateObjCount();
+  recenterPivot();
+  updateOutliner();
+}
+function addBox(color, pos, scale){ addShape('box', color, pos, scale); }
+function addCylinder(color, pos, scale){ addShape('cylinder', color, pos, scale); }
+function duplicateSelected(){
+  if(!selectedObj) return;
+  // offset by the box's own width (X scale) so big boxes don't overlap
+  // and tiny boxes don't end up floating far away
+  const offsetAmount = BOX_HALF * 2 * selectedObj.scale.x * 1.15;
+  const pos = selectedObj.position.clone().add(new THREE.Vector3(offsetAmount,0,0));
+  addShape(selectedObj.userData.shapeType || 'box', selectedObj.userData.color, pos, selectedObj.scale.clone(), selectedObj.rotation.y);
+}
+function arraySelected(extraCount){
+  for(let i=0;i<extraCount;i++) duplicateSelected();
+}
+function mirrorSelected(axis){
+  if(!selectedObj) return;
+  editorGroup.updateMatrixWorld();
+  const worldPos = selectedObj.getWorldPosition(new THREE.Vector3());
+  worldPos[axis] = -worldPos[axis];
+  const localPos = editorGroup.worldToLocal(worldPos.clone());
+  // mirroring across X or Z flips yaw sign so an asymmetric part (like a
+  // gripper finger) still faces the correct way on the mirrored side
+  const newRotY = -selectedObj.rotation.y;
+  addShape(selectedObj.userData.shapeType || 'box', selectedObj.userData.color, localPos, selectedObj.scale.clone(), newRotY);
+}
+let deletingObjects = [];
+let undoSnapshot = null;
+function captureSnapshot(){
+  return {
+    groupPos: editorGroup ? editorGroup.position.clone() : new THREE.Vector3(),
+    objects: editorObjects.map(o => ({
+      type: o.userData.shapeType || 'box',
+      position: o.position.clone(),
+      scale: o.scale.clone(),
+      rotY: o.rotation.y,
+      color: o.userData.color,
+      name: o.userData.name
+    }))
+  };
+}
+function pushUndoSnapshot(){
+  undoSnapshot = captureSnapshot();
+  const btn = document.getElementById('undo-btn');
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+function undoLast(){
+  if(!undoSnapshot) return;
+  const snap = undoSnapshot;
+  undoSnapshot = null;
+  const btn = document.getElementById('undo-btn');
+  btn.disabled = true;
+  btn.style.opacity = '0.4';
+
+  selectedObj = null;
+  editorObjects.forEach(o => { editorGroup.remove(o); disposeShape(o); });
+  editorObjects = [];
+  deletingObjects.forEach(d => { editorGroup.remove(d.group); disposeShape(d.group); });
+  deletingObjects = [];
+
+  // restore the pivot itself first — otherwise the whole assembly can
+  // land offset in world space even though each object's own local
+  // transform is restored correctly (recenterPivot below would only
+  // no-op if the restored centroid happens to be ~0, masking the drift).
+  editorGroup.position.copy(snap.groupPos);
+
+  snap.objects.forEach(s => {
+    const group = addShapeRaw(s.type, s.color, s.position, s.scale, s.rotY, true);
+    group.userData.name = s.name;
+  });
+  updateGizmoVisibility();
+  updateEditorUI();
+  updateObjCount();
+  updateOutliner();
+  recenterPivot();
+}
+function screenToWorldAtOrigin(clientX, clientY, canvasRect){
+  const ndcX = ((clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+  const ndcY = -((clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+  const vec = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
+  const dir = vec.sub(camera.position).normalize();
+  const dist = camera.position.length(); // roughly the depth where boxes live (near world origin)
+  return camera.position.clone().add(dir.multiplyScalar(dist));
+}
+function startDeleteAnimation(obj){
+  const mesh = obj.children[0], edges = obj.children[1];
+  mesh.material.transparent = true;
+  edges.material.transparent = true;
+  deletingObjects.push({
+    group: obj,
+    startTime: performance.now(),
+    duration: 500,
+    startPos: obj.position.clone(),
+    startScale: obj.scale.clone(),
+    startMeshOpacity: mesh.material.opacity,
+    startEdgeOpacity: edges.material.opacity
+  });
+}
+function deleteSelected(){
+  if(!selectedObj) return;
+  pushUndoSnapshot();
+  const obj = selectedObj;
+  selectedObj = null;
+  editorObjects = editorObjects.filter(o => o !== obj);
+  updateGizmoVisibility();
+  updateEditorUI();
+  updateObjCount();
+  recenterPivot();
+  updateOutliner();
+  startDeleteAnimation(obj);
+}
+function deleteAllSelected(){
+  if(!groupMoveActive || editorObjects.length === 0) return;
+  pushUndoSnapshot();
+  const toDelete = editorObjects.slice();
+  editorObjects = [];
+  toDelete.forEach(startDeleteAnimation);
+
+  groupMoveActive = false;
+  const btn = document.getElementById('select-all-btn');
+  btn.style.color = 'var(--glow-dim)';
+  btn.style.background = 'transparent';
+  btn.style.borderColor = 'rgba(62,207,255,0.35)';
+  document.getElementById('delete-all-btn').style.display = 'none';
+
+  updateGizmoVisibility();
+  updateEditorUI();
+  updateObjCount();
+  updateOutliner();
+  recenterPivot();
+}
+function updateDeletingObjects(){
+  if(deletingObjects.length === 0) return;
+  const trashEl = document.getElementById('trash-target');
+  const rect = document.getElementById('rig-canvas').getBoundingClientRect();
+  const trashRect = trashEl.getBoundingClientRect();
+  const trashScreenX = trashRect.left + trashRect.width/2;
+  const trashScreenY = trashRect.top + trashRect.height/2;
+  const worldTarget = screenToWorldAtOrigin(trashScreenX, trashScreenY, rect);
+  editorGroup.updateMatrixWorld();
+  const localTarget = editorGroup.worldToLocal(worldTarget.clone());
+
+  const now = performance.now();
+  for(let i = deletingObjects.length - 1; i >= 0; i--){
+    const d = deletingObjects[i];
+    const t = Math.min(1, (now - d.startTime) / d.duration);
+    const ease = t*t*t; // accelerate into the trash, like getting sucked in
+    d.group.position.lerpVectors(d.startPos, localTarget, ease);
+    d.group.scale.copy(d.startScale).multiplyScalar(1 - ease);
+    d.group.rotation.y += 0.35; // spin while shrinking
+    d.group.rotation.x += 0.22;
+    const mesh = d.group.children[0], edges = d.group.children[1];
+    mesh.material.opacity = d.startMeshOpacity * (1 - ease);
+    edges.material.opacity = d.startEdgeOpacity * (1 - ease);
+
+    if(t >= 1){
+      editorGroup.remove(d.group);
+      disposeShape(d.group);
+      deletingObjects.splice(i, 1);
+    }
+  }
+}
+function updateObjCount(){
+  document.getElementById('obj-count').textContent = editorObjects.length + ' OBJECT' + (editorObjects.length===1?'':'S');
+}
+function triggerDownload(filename, content, mime){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function meshToSTLTriangles(mesh){
+  // reads BufferGeometry directly (position attribute + index) and
+  // applies the mesh's full world matrix — no external exporter needed,
+  // which sidesteps the THREE.Geometry-vs-BufferGeometry version issue
+  // entirely (THREE.Geometry was removed in this three.js build).
+  const geo = mesh.geometry;
+  const posAttr = geo.attributes.position;
+  const index = geo.index;
+  mesh.updateMatrixWorld(true);
+  const matrixWorld = mesh.matrixWorld;
+  const triCount = index ? index.count/3 : posAttr.count/3;
+  const tris = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for(let i=0;i<triCount;i++){
+    let ia, ib, ic;
+    if(index){ ia=index.getX(i*3); ib=index.getX(i*3+1); ic=index.getX(i*3+2); }
+    else { ia=i*3; ib=i*3+1; ic=i*3+2; }
+    a.fromBufferAttribute(posAttr, ia).applyMatrix4(matrixWorld);
+    b.fromBufferAttribute(posAttr, ib).applyMatrix4(matrixWorld);
+    c.fromBufferAttribute(posAttr, ic).applyMatrix4(matrixWorld);
+    const normal = new THREE.Vector3().subVectors(b,a).cross(new THREE.Vector3().subVectors(c,a));
+    if(normal.lengthSq() > 1e-12) normal.normalize();
+    tris.push({normal: normal.clone(), a: a.clone(), b: b.clone(), c: c.clone()});
+  }
+  return tris;
+}
+function exportSTL(){
+  if(!editorGroup || editorObjects.length === 0) return;
+  editorGroup.updateMatrixWorld(true);
+  let allTris = [];
+  editorObjects.forEach(group => {
+    const mesh = group.children[0]; // children[0] is the solid mesh, children[1] is the edge lines — skip edges
+    allTris = allTris.concat(meshToSTLTriangles(mesh));
+  });
+  let out = 'solid DUMMY_ARM\n';
+  allTris.forEach(t => {
+    out += `facet normal ${t.normal.x.toFixed(6)} ${t.normal.y.toFixed(6)} ${t.normal.z.toFixed(6)}\n  outer loop\n`;
+    [t.a,t.b,t.c].forEach(v => {
+      // convert world units back to real mm for the exported file (1 unit = 100mm)
+      out += `    vertex ${(v.x*MM_PER_UNIT).toFixed(4)} ${(v.y*MM_PER_UNIT).toFixed(4)} ${(v.z*MM_PER_UNIT).toFixed(4)}\n`;
+    });
+    out += '  endloop\nendfacet\n';
+  });
+  out += 'endsolid DUMMY_ARM\n';
+  triggerDownload('dummy_arm.stl', out, 'model/stl');
+}
+function exportProjectJSON(){
+  if(!editorGroup) return;
+  const data = {
+    version: 1,
+    groupPos: {x:editorGroup.position.x, y:editorGroup.position.y, z:editorGroup.position.z},
+    objects: editorObjects.map(o => ({
+      type: o.userData.shapeType || 'box',
+      position: {x:o.position.x, y:o.position.y, z:o.position.z},
+      scale: {x:o.scale.x, y:o.scale.y, z:o.scale.z},
+      rotY: o.rotation.y,
+      color: o.userData.color,
+      name: o.userData.name
+    }))
+  };
+  triggerDownload('dummy_arm_project.json', JSON.stringify(data, null, 2), 'application/json');
+}
+function importProjectJSON(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch(err){ alert('That file is not a valid project JSON.'); return; }
+    if(!data || !Array.isArray(data.objects)){ alert('That file is not a valid project JSON.'); return; }
+    pushUndoSnapshot(); // one undo step to recover the previous scene if this was opened by mistake
+    selectedObj = null;
+    editorObjects.forEach(o => { editorGroup.remove(o); disposeShape(o); });
+    editorObjects = [];
+    deletingObjects.forEach(d => { editorGroup.remove(d.group); disposeShape(d.group); });
+    deletingObjects = [];
+    if(data.groupPos) editorGroup.position.set(data.groupPos.x, data.groupPos.y, data.groupPos.z);
+    data.objects.forEach(s => {
+      const group = addShapeRaw(
+        s.type, s.color,
+        new THREE.Vector3(s.position.x, s.position.y, s.position.z),
+        new THREE.Vector3(s.scale.x, s.scale.y, s.scale.z),
+        s.rotY || 0, true
+      );
+      group.userData.name = s.name;
+    });
+    updateGizmoVisibility();
+    updateEditorUI();
+    updateObjCount();
+    updateOutliner();
+    recenterPivot();
+  };
+  reader.readAsText(file);
+}
+function updateOutliner(){
+  const panel = document.getElementById('outliner');
+  panel.style.display = editMode && editorObjects.length > 0 ? 'block' : 'none';
+  panel.innerHTML = '';
+  editorObjects.forEach(obj => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:5px 8px; font-size:10px; border-bottom:1px solid rgba(62,207,255,0.12);' + ((obj === selectedObj || groupMoveActive) ? 'background:rgba(62,207,255,0.12);' : '');
+    const swatch = document.createElement('span');
+    swatch.style.cssText = 'width:10px; height:10px; flex-shrink:0; background:#' + obj.userData.color.toString(16).padStart(6,'0') + ';';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = obj.userData.name || 'OBJECT';
+    nameInput.style.cssText = 'flex:1; min-width:0; background:transparent; border:none; color:var(--text); font-family:\'Share Tech Mono\',monospace; font-size:10px;';
+    nameInput.addEventListener('change', () => { obj.userData.name = nameInput.value || 'OBJECT'; });
+    row.addEventListener('click', () => selectObject(obj));
+    row.appendChild(swatch);
+    row.appendChild(nameInput);
+    panel.appendChild(row);
+  });
+}
+function updateEditorUI(){
+  const showDup = editMode && !!selectedObj;
+  const showPanel = editMode && !!selectedObj;
+  document.getElementById('ed-add-float').style.display = editMode ? 'block' : 'none';
+  document.getElementById('ed-add-cyl-float').style.display = editMode ? 'block' : 'none';
+  document.getElementById('ed-dup-float').style.display = showDup ? 'block' : 'none';
+  document.getElementById('ed-del-float').style.display = showDup ? 'block' : 'none';
+  document.getElementById('editor-panel').style.display = showPanel ? 'block' : 'none';
+  document.getElementById('trash-target').style.display = editMode ? 'flex' : 'none';
+  document.querySelectorAll('#ed-colors .swatch').forEach(sw => {
+    sw.classList.toggle('selected', selectedObj && parseInt(sw.dataset.color) === selectedObj.userData.color);
+  });
+}
+function setEditMode(on){
+  editMode = on;
+  document.getElementById('mode-toggle').textContent = editMode ? '✎ EDIT MODE' : '◎ VIEW MODE';
+  if(!editMode){
+    selectObject(null);
+    if(groupMoveActive) toggleSelectAll();
+  }
+  if(editMode){ spinVelocityY = 0; spinVelocityX = 0; }
+  updateGizmoVisibility();
+  updateEditorUI();
+  updateOutliner();
+}
+
+function initThree(){
+  const container = document.getElementById('rig-canvas');
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, container.clientWidth/container.clientHeight, 0.1, 100);
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
+
+  // lighting rig — only used by solid mode's shaded material; hologram
+  // mode uses unlit MeshBasicMaterial so these don't affect it
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  scene.add(ambient);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  keyLight.position.set(4, 6, 5);
+  scene.add(keyLight);
+  const rimLight = new THREE.DirectionalLight(0x3ecfff, 0.35);
+  rimLight.position.set(-5, -3, -4);
+  scene.add(rimLight);
+
+  // reference grid on the base plane — sibling of editorGroup (not a
+  // child), so it stays fixed like a floor while the assembly rotates
+  // on top of it, toggled via the GRID button
+  gridHelper = new THREE.GridHelper(10, 20, 0x3ecfff, 0x1c6f8c);
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.3;
+  gridHelper.position.y = -1.5;
+  gridHelper.visible = false;
+  scene.add(gridHelper);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = container.clientWidth/container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  });
+
+  const el = renderer.domElement;
+  el.style.touchAction = 'none';
+
+  let activePointers = new Map();
+
+  function screenProject(worldPos, rect){
+    const v = worldPos.clone().project(camera);
+    return { x: (v.x*0.5+0.5)*rect.width, y: (-v.y*0.5+0.5)*rect.height };
+  }
+  function tryGizmoPick(x,y){
+    const grp = activeGizmoGroup();
+    if(!grp || !grp.visible) return null;
+    const rect = el.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((x-rect.left)/rect.width)*2-1, -((y-rect.top)/rect.height)*2+1);
+    raycaster.setFromCamera(ndc, camera);
+    const meshes = [];
+    grp.children.forEach(handle => handle.userData.hitMeshes.forEach(m => {
+      m.userData.axis = handle.userData.axis;
+      m.userData.sign = handle.userData.sign;
+      meshes.push(m);
+    }));
+    const hits = raycaster.intersectObjects(meshes, false);
+    if(!hits.length) return null;
+    return { axis: hits[0].object.userData.axis, sign: hits[0].object.userData.sign };
+  }
+  function beginGizmoDrag(pick, x, y){
+    pushUndoSnapshot();
+    gizmoAxis = pick.axis;
+    gizmoSign = pick.sign || 1;
+    const rect = el.getBoundingClientRect();
+
+    if(groupMoveActive){
+      if(gizmoMode === 'rotate'){
+        groupRotateStartCentroid = groupCentroid();
+        groupRotateStartPositions = editorObjects.map(o => o.position.clone());
+        groupRotateStartRotYs = editorObjects.map(o => o.rotation.y);
+        const worldPos = editorGroup.localToWorld(groupRotateStartCentroid.clone());
+        const p0 = screenProject(worldPos, rect);
+        gizmoRotateStartAngle = Math.atan2(y - p0.y, x - p0.x);
+        gizmoDragStartMouse = {x,y};
+        return;
+      }
+      groupMoveStartPositions = editorObjects.map(o => o.position.clone());
+      const worldPos = editorGroup.localToWorld(groupCentroid().clone());
+      const axisLocal = new THREE.Vector3(gizmoAxis==='x'?1:0, gizmoAxis==='y'?1:0, gizmoAxis==='z'?1:0);
+      const axisWorldDir = axisLocal.clone().applyQuaternion(editorGroup.quaternion).normalize();
+      const p1 = screenProject(worldPos, rect);
+      const p2 = screenProject(worldPos.clone().add(axisWorldDir), rect);
+      const sdx = p2.x-p1.x, sdy = p2.y-p1.y;
+      const len = Math.hypot(sdx,sdy) || 1;
+      gizmoScreenDir = { x: sdx/len, y: sdy/len };
+      gizmoPixelsPerUnit = len;
+      gizmoDragStartMouse = {x,y};
+      return;
+    }
+
+    if(!selectedObj) return;
+    gizmoStartObjPos = selectedObj.position.clone();
+    gizmoStartObjScale = selectedObj.scale.clone();
+    const worldPos = selectedObj.getWorldPosition(new THREE.Vector3());
+    if(gizmoMode === 'rotate'){
+      gizmoStartObjRotY = selectedObj.rotation.y;
+      const p0 = screenProject(worldPos, rect);
+      gizmoRotateStartAngle = Math.atan2(y - p0.y, x - p0.x);
+      gizmoDragStartMouse = {x,y};
+      return;
+    }
+    const axisLocal = new THREE.Vector3(gizmoAxis==='x'?1:0, gizmoAxis==='y'?1:0, gizmoAxis==='z'?1:0);
+    const axisWorldDir = axisLocal.clone().applyQuaternion(editorGroup.quaternion).normalize();
+    const p1 = screenProject(worldPos, rect);
+    const p2 = screenProject(worldPos.clone().add(axisWorldDir), rect);
+    const sdx = p2.x-p1.x, sdy = p2.y-p1.y;
+    const len = Math.hypot(sdx,sdy) || 1;
+    gizmoScreenDir = { x: sdx/len, y: sdy/len };
+    gizmoPixelsPerUnit = len;
+    gizmoDragStartMouse = {x,y};
+  }
+  function updateGizmoDrag(x,y){
+    if(!gizmoAxis) return;
+    if(groupMoveActive){
+      if(gizmoMode === 'rotate'){
+        const rect = el.getBoundingClientRect();
+        const worldPos = editorGroup.localToWorld(groupRotateStartCentroid.clone());
+        const p0 = screenProject(worldPos, rect);
+        const angleNow = Math.atan2(y - p0.y, x - p0.x);
+        const delta = angleNow - gizmoRotateStartAngle;
+        const theta = -delta; // matches the single-object rotate sign convention
+        editorObjects.forEach((o,i) => {
+          const rel = groupRotateStartPositions[i].clone().sub(groupRotateStartCentroid);
+          rel.applyAxisAngle(new THREE.Vector3(0,1,0), theta);
+          o.position.copy(groupRotateStartCentroid.clone().add(rel));
+          o.rotation.y = groupRotateStartRotYs[i] + theta;
+        });
+        syncGroupGizmoHandles();
+        return;
+      }
+      const dx = x - gizmoDragStartMouse.x, dy = y - gizmoDragStartMouse.y;
+      let delta = (dx*gizmoScreenDir.x + dy*gizmoScreenDir.y) / gizmoPixelsPerUnit;
+      if(snapEnabled){
+        const snapUnit = SNAP_MM / MM_PER_UNIT;
+        delta = Math.round(delta / snapUnit) * snapUnit;
+      }
+      editorObjects.forEach((o,i) => {
+        o.position.copy(groupMoveStartPositions[i]);
+        o.position[gizmoAxis] += delta;
+      });
+      syncGroupGizmoHandles();
+      return;
+    }
+    if(!selectedObj) return;
+    if(gizmoMode === 'rotate'){
+      const rect = el.getBoundingClientRect();
+      const worldPos = selectedObj.getWorldPosition(new THREE.Vector3());
+      const p0 = screenProject(worldPos, rect);
+      const angleNow = Math.atan2(y - p0.y, x - p0.x);
+      const delta = angleNow - gizmoRotateStartAngle;
+      selectedObj.rotation.y = gizmoStartObjRotY - delta;
+      return;
+    }
+    const dx = x - gizmoDragStartMouse.x, dy = y - gizmoDragStartMouse.y;
+    const amountWorld = (dx*gizmoScreenDir.x + dy*gizmoScreenDir.y) / gizmoPixelsPerUnit;
+    const axis = gizmoAxis;
+    if(gizmoMode === 'scale'){
+      // dragging one face: that face moves by amountWorld, the opposite face stays anchored.
+      // center shifts by half the movement; half-extent grows/shrinks by sign*half the movement.
+      const startHalf = BOX_HALF * gizmoStartObjScale[axis];
+      const newHalf = Math.max(0.03, startHalf + gizmoSign * amountWorld / 2);
+      selectedObj.scale[axis] = newHalf / BOX_HALF;
+      selectedObj.position[axis] = gizmoStartObjPos[axis] + amountWorld / 2;
+      syncGizmoPosition();
+      syncScaleHandles();
+      syncMoveHandles();
+      updateDimensionInputs();
+    } else {
+      let newVal = gizmoStartObjPos[axis] + amountWorld;
+      if(snapEnabled){
+        const snapUnit = SNAP_MM / MM_PER_UNIT; // mm -> world units directly (position, not a scale factor)
+        newVal = Math.round(newVal / snapUnit) * snapUnit;
+      }
+      selectedObj.position.copy(gizmoStartObjPos);
+      selectedObj.position[axis] = newVal;
+      syncGizmoPosition();
+    }
+  }
+  function endGizmoDrag(){
+    if(!gizmoAxis) return;
+    gizmoAxis = null;
+    recenterPivot();
+  }
+
+  function down(x,y){
+    downX = x; downY = y;
+    spinVelocityY = 0; spinVelocityX = 0;
+    if(editMode && (selectedObj || groupMoveActive)){
+      const pick = tryGizmoPick(x,y);
+      if(pick){ beginGizmoDrag(pick, x, y); dragging = false; return; }
+    }
+    dragging = true; lastX = x; lastY = y;
+  }
+  function move(x,y){
+    if(gizmoAxis){ updateGizmoDrag(x,y); return; }
+    if(!dragging) return;
+    const dx = x - lastX, dy = y - lastY;
+    lastX = x; lastY = y;
+    const rY = dx * 0.01, rX = dy * 0.01;
+    targetRotY += rY;
+    targetRotX += rX;
+    targetRotX = Math.max(-1.2, Math.min(1.2, targetRotX));
+    spinVelocityY = rY; spinVelocityX = rX;
+  }
+  const raycaster = new THREE.Raycaster();
+  function tapSelect(x,y){
+    const rect = el.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((x-rect.left)/rect.width)*2-1, -((y-rect.top)/rect.height)*2+1);
+    raycaster.setFromCamera(ndc, camera);
+    if(!editorGroup) return;
+    const hits = raycaster.intersectObjects(editorObjects, true);
+    if(hits.length){
+      let obj = hits[0].object;
+      while(obj.parent && obj.parent !== editorGroup) obj = obj.parent;
+      if(obj !== moveGizmoGroup && obj !== scaleGizmoGroup){
+        if(groupMoveActive) toggleSelectAll(); // tapping one box means "just this one" — exit group mode first
+        selectObject(obj);
+      }
+    }
+    // tapping empty space no longer deselects — selection only changes when you tap a different box
+  }
+  function up(x,y){
+    if(gizmoAxis){ endGizmoDrag(); return; }
+    const wasDragging = dragging;
+    dragging = false;
+    if(editMode || !wasDragging){
+      spinVelocityY = 0; spinVelocityX = 0;
+    }
+    // else: leave spinVelocityY/X as-is — animate() picks it up and decelerates it, view-mode only
+    if(editMode && wasDragging && activePointers.size <= 1 && Math.hypot(x-downX, y-downY) < 14) tapSelect(x,y);
+  }
+
+  /* Mouse / pen via Pointer Events (touch is handled separately below,
+     since touch drags on canvas were getting swallowed as page gestures) */
+  el.addEventListener('pointerdown', e => {
+    if(e.pointerType === 'touch') return;
+    try { el.setPointerCapture(e.pointerId); } catch(err) {}
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activePointers.size === 1) down(e.clientX, e.clientY); else dragging = false;
+  });
+  window.addEventListener('pointermove', e => {
+    if(e.pointerType === 'touch') return;
+    if(!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activePointers.size === 1) move(e.clientX, e.clientY);
+  });
+  window.addEventListener('pointerup', e => {
+    if(e.pointerType === 'touch') return;
+    if(!activePointers.has(e.pointerId)) return;
+    const pos = activePointers.get(e.pointerId) || {x:e.clientX, y:e.clientY};
+    activePointers.delete(e.pointerId);
+    if(activePointers.size === 0) up(pos.x, pos.y); else dragging = false;
+  });
+  window.addEventListener('pointercancel', e => {
+    if(e.pointerType === 'touch') return;
+    activePointers.delete(e.pointerId);
+    dragging = false;
+    gizmoAxis = null;
+  });
+
+  /* Touch: handled directly via Touch Events, with preventDefault so the
+     browser never turns the drag into a page scroll/gesture. */
+  el.addEventListener('touchstart', e => {
+    if(e.touches.length === 1){
+      const t = e.touches[0];
+      downX = t.clientX; downY = t.clientY;
+      spinVelocityY = 0; spinVelocityX = 0;
+      if(editMode && (selectedObj || groupMoveActive)){
+        const pick = tryGizmoPick(t.clientX, t.clientY);
+        if(pick){ beginGizmoDrag(pick, t.clientX, t.clientY); touchDragging = false; return; }
+      }
+      touchDragging = true;
+      lastX = t.clientX; lastY = t.clientY;
+    } else if(e.touches.length === 2){
+      touchDragging = false;
+      pinchStart = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    }
+  }, {passive:false});
+
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if(e.touches.length === 1){
+      const t = e.touches[0];
+      if(gizmoAxis){ updateGizmoDrag(t.clientX, t.clientY); return; }
+      if(touchDragging){
+        const dx = t.clientX - lastX, dy = t.clientY - lastY;
+        lastX = t.clientX; lastY = t.clientY;
+        const rY = dx * 0.01, rX = dy * 0.01;
+        targetRotY += rY;
+        targetRotX += rX;
+        targetRotX = Math.max(-1.2, Math.min(1.2, targetRotX));
+        spinVelocityY = rY; spinVelocityX = rX;
+      }
+    } else if(e.touches.length === 2){
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      if(pinchStart !== null){
+        targetDist += (pinchStart - d) * 0.01;
+        targetDist = Math.max(3, Math.min(14, targetDist));
+      }
+      pinchStart = d;
+    }
+  }, {passive:false});
+
+  el.addEventListener('touchend', e => {
+    if(e.touches.length === 0){
+      if(gizmoAxis){ endGizmoDrag(); }
+      else {
+        if(editMode || !touchDragging){ spinVelocityY = 0; spinVelocityX = 0; }
+        if(editMode && touchDragging && Math.hypot(lastX-downX, lastY-downY) < 14) tapSelect(lastX, lastY);
+      }
+      touchDragging = false;
+      pinchStart = null;
+    } else if(e.touches.length === 1){
+      touchDragging = true;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    }
+  }, {passive:false});
+
+  el.addEventListener('touchcancel', () => { touchDragging = false; pinchStart = null; gizmoAxis = null; spinVelocityY = 0; spinVelocityX = 0; });
+
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    targetDist -= e.deltaY * 0.003;
+    targetDist = Math.max(3, Math.min(14, targetDist));
+  }, {passive:false});
+
+  document.getElementById('reset-view').addEventListener('click', () => {
+    targetDist = 8.5; targetRotX = 0.15; targetRotY = 0.4;
+  });
+
+  function stepZoom(amount){ targetDist = Math.max(3, Math.min(14, targetDist + amount)); }
+  let zoomHoldTimer = null;
+  function bindZoomBtn(id, amount){
+    const btn = document.getElementById(id);
+    const start = e => { e.preventDefault(); stepZoom(amount); zoomHoldTimer = setInterval(() => stepZoom(amount), 120); };
+    const stop = () => clearInterval(zoomHoldTimer);
+    btn.addEventListener('pointerdown', start);
+    btn.addEventListener('pointerup', stop);
+    btn.addEventListener('pointerleave', stop);
+    btn.addEventListener('pointercancel', stop);
+  }
+  bindZoomBtn('zoom-in', -0.8);
+  bindZoomBtn('zoom-out', 0.8);
+  document.getElementById('undo-btn').addEventListener('click', undoLast);
+
+  document.getElementById('ed-add-float').addEventListener('click', () => addBox());
+  document.getElementById('ed-add-cyl-float').addEventListener('click', () => addCylinder());
+  document.getElementById('ed-dup-float').addEventListener('click', duplicateSelected);
+  document.getElementById('ed-del-float').addEventListener('click', deleteSelected);
+
+  document.getElementById('ed-scale-down').addEventListener('click', () => { if(selectedObj){ pushUndoSnapshot(); selectedObj.scale.multiplyScalar(0.85); syncScaleHandles(); syncMoveHandles(); updateDimensionInputs(); } });
+  document.getElementById('ed-scale-up').addEventListener('click', () => { if(selectedObj){ pushUndoSnapshot(); selectedObj.scale.multiplyScalar(1.15); syncScaleHandles(); syncMoveHandles(); updateDimensionInputs(); } });
+  ['x','y','z'].forEach(axis => {
+    document.getElementById('dim-'+axis).addEventListener('change', e => { if(selectedObj) pushUndoSnapshot(); applyDimensionInput(axis, e.target.value); });
+  });
+  document.getElementById('gizmo-move-btn').addEventListener('click', () => setGizmoMode('move'));
+  document.getElementById('gizmo-scale-btn').addEventListener('click', () => setGizmoMode('scale'));
+  document.getElementById('gizmo-rotate-btn').addEventListener('click', () => setGizmoMode('rotate'));
+  setGizmoMode('move');
+
+  document.getElementById('mirror-x-btn').addEventListener('click', () => mirrorSelected('x'));
+  document.getElementById('mirror-z-btn').addEventListener('click', () => mirrorSelected('z'));
+  document.getElementById('array-btn').addEventListener('click', () => arraySelected(2));
+
+  document.getElementById('export-stl-btn').addEventListener('click', exportSTL);
+  document.getElementById('save-btn').addEventListener('click', exportProjectJSON);
+  document.getElementById('load-btn').addEventListener('click', () => document.getElementById('load-file-input').click());
+  document.getElementById('load-file-input').addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) importProjectJSON(e.target.files[0]);
+    e.target.value = ''; // allow re-selecting the same file next time
+  });
+
+  const colorRow = document.getElementById('ed-colors');
+  EDITOR_COLORS.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    sw.dataset.color = c;
+    sw.style.background = '#' + c.toString(16).padStart(6,'0');
+    sw.addEventListener('click', () => {
+      if(!selectedObj) return;
+      pushUndoSnapshot();
+      selectedObj.userData.color = c;
+      if(!solidMode) selectedObj.children[0].material.color.set(c);
+      highlightObj(selectedObj, true);
+      updateEditorUI();
+      updateOutliner();
+    });
+    colorRow.appendChild(sw);
+  });
+
+  // expose to top-level scope so the hand-tracking gesture logic (onHandResults,
+  // defined outside this closure) can drive the same select/gizmo interactions
+  // that touch and mouse use.
+  handInteractionAPI = {
+    tryGizmoPick, beginGizmoDrag, updateGizmoDrag, endGizmoDrag, tapSelect,
+    getRect: () => el.getBoundingClientRect()
+  };
+
+  animate();
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  updateDeletingObjects();
+
+  if((!editMode || handControlOn) && !dragging && !touchDragging && !gizmoAxis && (Math.abs(spinVelocityY) > 0.0002 || Math.abs(spinVelocityX) > 0.0002)){
+    targetRotY += spinVelocityY;
+    targetRotX += spinVelocityX;
+    targetRotX = Math.max(-1.2, Math.min(1.2, targetRotX));
+    spinVelocityY *= 0.97;
+    spinVelocityX *= 0.97;
+    if(Math.abs(spinVelocityY) <= 0.0002) spinVelocityY = 0;
+    if(Math.abs(spinVelocityX) <= 0.0002) spinVelocityX = 0;
+  }
+
+  rotX += (targetRotX - rotX) * 0.15;
+  rotY += (targetRotY - rotY) * 0.15;
+  camDist += (targetDist - camDist) * 0.12;
+
+  camera.position.set(0, 0, camDist);
+  camera.lookAt(0, 0, 0);
+
+  if(editorGroup){
+    editorGroup.rotation.y = rotY;
+    editorGroup.rotation.x = rotX;
+  }
+
+  renderer.render(scene, camera);
+}
+
+function setMaximized(on){
+  document.getElementById('shell').classList.toggle('maximized', on);
+  document.getElementById('exit-max').classList.toggle('show', on);
+  document.getElementById('fullscreen-btn').textContent = on ? '⛶ EXIT' : '⛶ FULL SCREEN';
+  requestAnimationFrame(() => {
+    if(renderer){
+      const c = document.getElementById('rig-canvas');
+      camera.aspect = c.clientWidth/c.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(c.clientWidth, c.clientHeight);
+    }
+  });
+}
+document.getElementById('fullscreen-btn').addEventListener('click', () => {
+  setMaximized(!document.getElementById('shell').classList.contains('maximized'));
+});
+document.getElementById('exit-max').addEventListener('click', () => setMaximized(false));
+document.getElementById('mode-toggle').addEventListener('click', () => setEditMode(!editMode));
+document.getElementById('solid-mode-btn').addEventListener('click', toggleSolidMode);
+document.getElementById('hand-control-btn').addEventListener('click', toggleHandControl);
+document.getElementById('snap-mode-btn').addEventListener('click', toggleSnapMode);
+document.getElementById('select-all-btn').addEventListener('click', toggleSelectAll);
+document.getElementById('delete-all-btn').addEventListener('click', deleteAllSelected);
+document.getElementById('grid-toggle-btn').addEventListener('click', toggleGrid);
+
+setTimeout(() => {
+  const boot = document.getElementById('boot');
+  if(boot) boot.style.display = 'none';
+}, 2300);
+
+initThree_safe();
+function initThree_safe(){
+  if(typeof THREE === 'undefined'){
+    document.getElementById('rig-canvas').innerHTML = '<div style="color:#ffb020; padding:20px; font-size:12px; letter-spacing:1px;">3D library failed to load (network issue). Pull to refresh or reopen the file.</div>';
+    return;
+  }
+  initThree();
+  ensureEditorGroup();
+  updateEditorUI();
+}
+</script>
+</body>
+</html>
